@@ -5,26 +5,26 @@ from googleapiclient.discovery import build
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# --- Configurações ---
+# --- Settings ---
 nltk.download('stopwords', quiet=True)
 from nltk.corpus import stopwords
 
-STOPWORDS_PT = set(stopwords.words('portuguese'))
+STOPWORDS_EN = set(stopwords.words('english'))
 
-API_KEY = "AIzaSyA_iQnglhGczNLHPcOvE8P_qzFOTrfp0DY"
+API_KEY = "YOUR_API_KEY_HERE"
 YOUTUBE = build("youtube", "v3", developerKey=API_KEY)
 
-# --- Funções ---
-def limpar_texto(texto):
-    """Remove stopwords e converte para minúsculas."""
-    return " ".join(p for p in texto.lower().split() if p not in STOPWORDS_PT)
+# --- Functions ---
+def clean_text(text):
+    """Removes stopwords and converts text to lowercase."""
+    return " ".join(word for word in text.lower().split() if word not in STOPWORDS_EN)
 
-def baixar_comentarios(video_id):
-    """Baixa todos os comentários e respostas de um vídeo."""
-    comentarios = []
+def fetch_comments(video_id):
+    """Fetches all top-level comments and replies from a video."""
+    comments = []
     next_page_token = None
 
-    print("Baixando comentários...")
+    print("Downloading comments...")
 
     while True:
         try:
@@ -38,57 +38,57 @@ def baixar_comentarios(video_id):
             res = req.execute()
 
             for item in res["items"]:
-                # Comentário principal
-                comentario = item["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
-                comentarios.append(comentario)
+                # Top-level comment
+                comment = item["snippet"]["topLevelComment"]["snippet"]["textDisplay"]
+                comments.append(comment)
 
-                # Respostas (primeiro nível)
+                # First-level replies
                 for reply in item.get("replies", {}).get("comments", []):
-                    comentarios.append(reply["snippet"]["textDisplay"])
+                    comments.append(reply["snippet"]["textDisplay"])
 
             next_page_token = res.get("nextPageToken")
             if not next_page_token:
                 break
 
-            # Intervalo para evitar limite de taxa
+            # Delay to avoid hitting rate limits
             time.sleep(random.uniform(0.5, 1.5))
 
         except Exception as e:
-            print(f"Erro: {e}. Retentando em 5s...")
+            print(f"Error: {e}. Retrying in 5 seconds...")
             time.sleep(5)
 
-    print(f"{len(comentarios)} comentários baixados.\n")
-    return comentarios
+    print(f"{len(comments)} comments downloaded.\n")
+    return comments
 
-def buscar_relevantes(comentarios, query):
-    """Calcula a similaridade e retorna comentários mais relevantes."""
-    comentarios_limpos = [limpar_texto(c) for c in comentarios]
-    query_limpa = [limpar_texto(query)]
+def search_relevant_comments(comments, query):
+    """Calculates similarity and returns the most relevant comments."""
+    clean_comments = [clean_text(c) for c in comments]
+    clean_query = [clean_text(query)]
 
     vectorizer = TfidfVectorizer()
-    tfidf_docs = vectorizer.fit_transform(comentarios_limpos)
-    tfidf_query = vectorizer.transform(query_limpa)
+    tfidf_docs = vectorizer.fit_transform(clean_comments)
+    tfidf_query = vectorizer.transform(clean_query)
 
-    similaridades = cosine_similarity(tfidf_query, tfidf_docs)[0]
+    similarities = cosine_similarity(tfidf_query, tfidf_docs)[0]
 
-    resultados = [
-        (c, s) for c, s in zip(comentarios, similaridades) if s > 0
+    results = [
+        (c, s) for c, s in zip(comments, similarities) if s > 0
     ]
-    resultados.sort(key=lambda x: x[1], reverse=True)
-    return resultados
+    results.sort(key=lambda x: x[1], reverse=True)
+    return results
 
-# --- Execução principal ---
+# --- Main Execution ---
 if __name__ == "__main__":
-    link = input("Qual link do seu vídeo? ").strip()
+    link = input("Enter YouTube video link: ").strip()
     video_id = link.replace("https://www.youtube.com/watch?v=", "").split("&")[0]
-    query = input("Qual sua query? ").strip()
+    query = input("Enter your search query: ").strip()
 
-    comentarios = baixar_comentarios(video_id)
-    relevantes = buscar_relevantes(comentarios, query)
+    comments = fetch_comments(video_id)
+    relevant_comments = search_relevant_comments(comments, query)
 
-    if relevantes:
-        print("\nComentários mais relevantes:")
-        for i, (comentario, score) in enumerate(relevantes[:5], 1):
-            print(f"{i}. [{score:.3f}] {comentario}")
+    if relevant_comments:
+        print("\nMost relevant comments:")
+        for i, (comment, score) in enumerate(relevant_comments[:5], 1):
+            print(f"{i}. [{score:.3f}] {comment}")
     else:
-        print("\nNenhum comentário relevante encontrado.")
+        print("\nNo relevant comments found.")
